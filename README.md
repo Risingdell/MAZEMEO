@@ -334,9 +334,7 @@ To modify the algorithm:
 
 (Specify your project license)
 
-## 👤 Author
 
-Claude Code – Anthropic
 
 ---
 
