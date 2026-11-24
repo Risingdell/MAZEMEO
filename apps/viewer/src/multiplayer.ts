@@ -3,6 +3,7 @@ export interface NetworkPlayer {
   name: string;
   spawnIndex: number;
   connected: boolean;
+  ready: boolean;
   position: { x: number; y: number; z: number };
   yaw: number;
   speed: number;
@@ -44,6 +45,12 @@ const STORAGE_KEY = 'forest-escape-local-session';
 /** Same-machine or same-Wi-Fi room client. Reconnects to the last room for 60 seconds. */
 export class LocalMultiplayer {
   private readonly panel: HTMLElement;
+  private readonly lobby: HTMLElement;
+  private readonly lobbyStatus: HTMLElement;
+  private readonly lobbyRoster: HTMLElement;
+  private readonly lobbyCode: HTMLElement;
+  private readonly lobbyReadyButton: HTMLButtonElement;
+  private readonly lobbyStartButton: HTMLButtonElement;
   private readonly status: HTMLElement;
   private readonly playersList: HTMLElement;
   private readonly roomLabel: HTMLElement;
@@ -90,6 +97,48 @@ export class LocalMultiplayer {
       if (event.key === 'Enter') this.join();
     });
 
+    this.lobby = document.createElement('section');
+    this.lobby.id = 'mp-lobby';
+    this.lobby.hidden = true;
+    this.lobby.innerHTML = `
+      <div class="lobby-card">
+        <div class="lobby-topline"><span>FOREST ESCAPE <i>·</i> LOCAL MATCH</span><button id="mp-lobby-leave">Leave room</button></div>
+        <h1>Gather your party</h1>
+        <p class="lobby-lede">Join the same Wi-Fi or hotspot, take a seat, then ready up.</p>
+        <div class="lobby-content">
+          <section class="lobby-share">
+            <span class="lobby-caption">ROOM CODE</span>
+            <div class="lobby-code"><strong id="mp-lobby-code">-----</strong><button id="mp-lobby-copy">Copy</button></div>
+            <p>Friends open this game address and enter the code:</p>
+            <code id="mp-lobby-address"></code>
+            <div class="lobby-network"><span class="network-dot"></span> Same local network · no internet required</div>
+          </section>
+          <section class="lobby-roster-wrap">
+            <div class="lobby-roster-title"><h2>Players</h2><span id="mp-lobby-count">0 / 6</span></div>
+            <div id="mp-lobby-roster" class="lobby-roster"></div>
+          </section>
+        </div>
+        <footer class="lobby-footer">
+          <div><strong id="mp-lobby-status">Waiting for players…</strong><small>At least 2 players · maximum 6</small></div>
+          <div class="lobby-buttons"><button id="mp-lobby-ready" class="ready-button">I’m ready</button><button id="mp-lobby-start" class="primary" disabled>Start match</button></div>
+        </footer>
+      </div>
+    `;
+    document.body.append(this.lobby);
+    this.lobbyStatus = this.lobby.querySelector('#mp-lobby-status')!;
+    this.lobbyRoster = this.lobby.querySelector('#mp-lobby-roster')!;
+    this.lobbyCode = this.lobby.querySelector('#mp-lobby-code')!;
+    this.lobbyReadyButton = this.lobby.querySelector('#mp-lobby-ready')!;
+    this.lobbyStartButton = this.lobby.querySelector('#mp-lobby-start')!;
+    this.lobbyReadyButton.addEventListener('click', () => {
+      const self = this.room?.players.find((player) => player.id === this.room?.you.id);
+      this.send({ type: 'ready', ready: !self?.ready });
+      this.lobbyStatus.textContent = 'Updating your ready status…';
+    });
+    this.lobbyStartButton.addEventListener('click', () => this.send({ type: 'start' }));
+    this.lobby.querySelector<HTMLButtonElement>('#mp-lobby-leave')!.addEventListener('click', () => this.leave());
+    this.lobby.querySelector<HTMLButtonElement>('#mp-lobby-copy')!.addEventListener('click', () => void this.copyLobbyInfo());
+
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -122,7 +171,10 @@ export class LocalMultiplayer {
   }
 
   private create(): void {
+    this.releaseCurrentRoom();
     this.clearSession();
+    this.panel.hidden = false;
+    this.lobby.hidden = true;
     this.requested = { type: 'create', name: this.playerName() };
     this.intentionalClose = false;
     this.openSocket();
@@ -134,7 +186,10 @@ export class LocalMultiplayer {
       this.status.textContent = 'Enter the 5-character room code.';
       return;
     }
+    this.releaseCurrentRoom();
     this.clearSession();
+    this.panel.hidden = false;
+    this.lobby.hidden = true;
     this.requested = { type: 'join', roomCode, name: this.playerName() };
     this.intentionalClose = false;
     this.openSocket();
@@ -188,6 +243,7 @@ export class LocalMultiplayer {
     }
     if (message.type === 'error') {
       this.status.textContent = String(message.message ?? 'Connection error.');
+      if (!this.lobby.hidden) this.lobbyStatus.textContent = this.status.textContent;
       if (this.requested?.type !== 'create' && !this.saved) this.closeSocket();
       return;
     }
@@ -210,6 +266,14 @@ export class LocalMultiplayer {
       this.startButton.hidden = !(!room.started && !room.ended && room.hostId === room.you.id);
       this.startButton.disabled = room.players.filter((player) => player.connected).length < 2;
       this.leaveButton.hidden = false;
+      this.panel.hidden = !room.ended;
+      this.lobby.hidden = room.started || room.ended;
+      if (!room.started && !room.ended) this.renderLobby(room);
+      if (room.ended) {
+        this.lobbyStatus.textContent = room.winnerId
+          ? `${room.players.find((player) => player.id === room.winnerId)?.name ?? 'A player'} won the race.`
+          : 'The match has ended.';
+      }
       this.renderPlayers(room);
       this.handlers.onRoom(room);
       if (room.started && (!wasStarted || this.startedSeed !== room.seed)) {
@@ -242,6 +306,46 @@ export class LocalMultiplayer {
     }
   }
 
+  private renderLobby(room: NetworkRoom): void {
+    this.lobbyCode.textContent = room.roomCode;
+    this.lobby.querySelector<HTMLElement>('#mp-lobby-address')!.textContent = window.location.origin;
+    const connected = room.players.filter((player) => player.connected).length;
+    const ready = room.players.filter((player) => player.connected && player.ready).length;
+    this.lobby.querySelector<HTMLElement>('#mp-lobby-count')!.textContent = `${connected} / 6 connected`;
+    const self = room.players.find((player) => player.id === room.you.id);
+    const allReady = connected >= 2 && ready === connected;
+    this.lobbyReadyButton.textContent = self?.ready ? '✓ Ready' : 'I’m ready';
+    this.lobbyReadyButton.classList.toggle('is-ready', Boolean(self?.ready));
+    this.lobbyStartButton.hidden = room.hostId !== room.you.id;
+    this.lobbyStartButton.disabled = !allReady;
+    this.lobbyStatus.textContent = connected < 2
+      ? 'Waiting for at least one more player…'
+      : allReady ? 'Everyone is ready. The host can start.' : `${ready} of ${connected} players ready`;
+
+    const bySeat = new Map(room.players.map((player) => [player.spawnIndex, player]));
+    this.lobbyRoster.replaceChildren();
+    for (let seat = 0; seat < 6; seat++) {
+      const player = bySeat.get(seat);
+      const slot = document.createElement('div');
+      slot.className = `lobby-slot${player ? ' occupied' : ' open'}`;
+      const badge = document.createElement('span');
+      badge.className = 'slot-number';
+      badge.textContent = String(seat + 1).padStart(2, '0');
+      const details = document.createElement('span');
+      details.className = 'slot-details';
+      const name = document.createElement('strong');
+      name.textContent = player ? player.name : 'Open seat';
+      const state = document.createElement('small');
+      state.textContent = player ? !player.connected ? 'Reconnecting…' : player.ready ? 'Ready' : 'Not ready' : 'Waiting for a player';
+      details.append(name, state);
+      const tag = document.createElement('span');
+      tag.className = `slot-state${player?.ready && player.connected ? ' ready' : ''}`;
+      tag.textContent = player ? player.id === room.hostId ? 'HOST' : player.ready && player.connected ? 'READY' : player.connected ? 'HERE' : 'OFFLINE' : '+';
+      slot.append(badge, details, tag);
+      this.lobbyRoster.append(slot);
+    }
+  }
+
   private send(message: object): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
   }
@@ -249,11 +353,12 @@ export class LocalMultiplayer {
   private leave(): void {
     this.intentionalClose = true;
     window.clearTimeout(this.retryTimer);
-    this.send({ type: 'leave' });
-    this.closeSocket();
+    this.releaseCurrentRoom();
     this.clearSession();
     this.room = null;
     this.startedSeed = null;
+    this.panel.hidden = false;
+    this.lobby.hidden = true;
     this.roomLabel.textContent = 'No room';
     this.status.textContent = 'Create a room or join a friend.';
     this.playersList.replaceChildren();
@@ -265,6 +370,12 @@ export class LocalMultiplayer {
   private closeSocket(): void {
     this.socket?.close();
     this.socket = null;
+  }
+
+  private releaseCurrentRoom(): void {
+    if (!this.socket) return;
+    this.send({ type: 'leave' });
+    this.closeSocket();
   }
 
   private clearSession(): void {
@@ -279,6 +390,17 @@ export class LocalMultiplayer {
       this.status.textContent = 'Address copied. Send the address and room code to your friends.';
     } catch {
       this.status.textContent = `Send ${window.location.origin} and room code ${this.room?.roomCode ?? ''} to your friends.`;
+    }
+  }
+
+  private async copyLobbyInfo(): Promise<void> {
+    const address = window.location.origin;
+    const roomCode = this.room?.roomCode ?? '';
+    try {
+      await navigator.clipboard.writeText(`${address}\nRoom code: ${roomCode}`);
+      this.lobbyStatus.textContent = 'Address and room code copied. Send them to your friends.';
+    } catch {
+      this.lobbyStatus.textContent = `Send ${address} and room code ${roomCode} to your friends.`;
     }
   }
 }

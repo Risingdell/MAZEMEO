@@ -55,6 +55,7 @@ function playerView(player) {
     name: player.name,
     spawnIndex: player.spawnIndex,
     connected: player.connected,
+    ready: player.ready,
     position: player.position,
     yaw: player.yaw,
     speed: player.speed,
@@ -100,7 +101,9 @@ function broadcastSnapshot(room) {
 function createPlayer(room, name, socket) {
   const id = randomUUID();
   const token = randomBytes(24).toString('base64url');
-  const spawnIndex = room.players.size;
+  const occupiedSeats = new Set([...room.players.values()].map((player) => player.spawnIndex));
+  const spawnIndex = Array.from({ length: MAX_PLAYERS }, (_, index) => index).find((index) => !occupiedSeats.has(index));
+  if (spawnIndex === undefined) throw new Error('No open spawn seat');
   const node = room.maze.nodes[room.maze.spawns[spawnIndex]];
   const p = {
     id,
@@ -109,6 +112,7 @@ function createPlayer(room, name, socket) {
     spawnIndex,
     socket,
     connected: true,
+    ready: false,
     expires: null,
     position: { x: node.x, y: node.y + 1.1, z: node.z },
     yaw: 0,
@@ -174,7 +178,8 @@ async function finishRoom(room, reason, winnerId = null) {
 }
 
 function startRoom(room) {
-  if (room.started || room.ended || room.players.size < 2) return false;
+  const connected = [...room.players.values()].filter((player) => player.connected);
+  if (room.started || room.ended || connected.length < 2 || connected.some((player) => !player.ready)) return false;
   room.started = true;
   room.startedAt = new Date().toISOString();
   for (const p of room.players.values()) {
@@ -252,6 +257,11 @@ function acceptPose(room, player, data) {
   const elapsed = Math.min(2, Math.max(0.05, (now - player.lastPoseAt) / 1000));
   const moved = Math.hypot(x - player.position.x, z - player.position.z);
   if (moved > 10 * elapsed + 2) return;
+  const samples = Math.ceil(moved / 1);
+  for (let i = 1; i <= samples; i++) {
+    const t = i / samples;
+    if (!isWalkable(room.field, player.position.x + (x - player.position.x) * t, player.position.z + (z - player.position.z) * t)) return;
+  }
   const floor = heightAt(room.field, x, z) + 1.1;
   if (y < floor - 3 || y > floor + 5) return;
 
@@ -324,7 +334,13 @@ wss.on('connection', (ws) => {
     switch (data.type) {
       case 'start':
         if (player.id !== room.hostId) return send(ws, { type: 'error', message: 'Only the room host can start the match.' });
-        if (!startRoom(room)) send(ws, { type: 'error', message: 'At least two players must be connected before starting.' });
+        if (!startRoom(room)) send(ws, { type: 'error', message: 'At least two players must be connected and everyone must be ready.' });
+        break;
+      case 'ready':
+        if (!room.started && !room.ended) {
+          player.ready = Boolean(data.ready);
+          broadcastRoom(room);
+        }
         break;
       case 'pose':
         acceptPose(room, player, data);
@@ -337,7 +353,7 @@ wss.on('connection', (ws) => {
         player.connected = false;
         clearTimeout(player.expires);
         room.players.delete(player.id);
-        sockets.delete;
+        if (room.hostId === player.id) room.hostId = [...room.players.values()].find((candidate) => candidate.connected)?.id ?? null;
         broadcastRoom(room);
         ws.close(1000, 'Left room');
         break;
@@ -354,6 +370,8 @@ wss.on('connection', (ws) => {
     if (!room || !player || player.socket !== ws) return;
     player.socket = null;
     player.connected = false;
+    if (!room.started) player.ready = false;
+    if (room.hostId === player.id) room.hostId = [...room.players.values()].find((candidate) => candidate.connected)?.id ?? player.id;
     player.expires = setTimeout(() => expirePlayer(room, player), RECONNECT_MS);
     broadcastRoom(room);
     console.log(`${player.name} disconnected from ${room.code}; keeping their seat for ${RECONNECT_MS / 1000}s`);

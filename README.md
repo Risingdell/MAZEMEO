@@ -12,6 +12,7 @@ An 8-player race up a forested mountain. Every match is a new procedural maze of
 ```bash
 npm install
 npm run dev          # Maze Lab at http://localhost:5173
+npm run host         # Build and host a 6-player LAN match on port 3000
 npm test             # 26 tests over 60 seeds
 npm run typecheck
 npm run maze -- 42 7 # print stats for seeds
@@ -21,6 +22,17 @@ npm run survey       # tune: stats over 300 seeds
 **URL options:** `?seed=42` · `?cam=p1`..`p8` (stand at a spawn) · `?time=5..19` · `?weather=clear|overcast|mist|rain|storm` · `?auto=1` (weather cycles) · `?quality=low`
 
 **Walk controls:** WASD move · Shift run · Space jump · C crouch · Click throw a stone · **V switch first/third person** · Esc pause (click to resume)
+
+## Play a local multiplayer match
+
+1. On the host laptop, run `npm run host` from this project folder. The command builds the game and starts one central game server on port 3000.
+2. Open `http://localhost:3000` on the host laptop. The terminal prints its Wi-Fi/hotspot address, for example `http://192.168.1.24:3000`.
+3. The host clicks **Create room** and shares that address and the five-character room code with up to five other players.
+4. Everyone must be on the same Wi-Fi or hotspot. They open the host's address in a modern desktop browser and enter the room code. The six-seat lobby shows who joined; each connected player clicks **I'm ready**, and the host starts when at least two players are connected and ready.
+
+The host laptop must stay on and connected. Allow Node.js through the host computer's firewall on **Private networks** if Windows asks. Some phone hotspots isolate connected devices; if players cannot open the host address, use a Wi-Fi router or a hotspot that allows devices to communicate. Internet access is not needed for a LAN match.
+
+The server assigns unique spawns, checks submitted positions against the generated maze's walkable field and movement limits, tracks distance and regions, decides who reached the exit first, and broadcasts the shared player state. A dropped player can reconnect for 60 seconds; the browser remembers their room session. Finished match summaries are appended to `apps/server/data/matches.jsonl` on the host. This first multiplayer version relays validated player state; full server-side physics simulation and protection against modified clients remain future work.
 
 ## Layout
 
