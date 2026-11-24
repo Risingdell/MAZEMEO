@@ -1,0 +1,29 @@
+{
+  "name": "mazemeo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Forest Escape PvP - procedural mountain-forest maze race",
+  "scripts": {
+    "dev": "vite --config apps/viewer/vite.config.ts",
+    "build": "vite build --config apps/viewer/vite.config.ts",
+    "host": "npm run build && node apps/server/index.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "maze": "node packages/maze-core/scripts/print-maze.ts",
+    "survey": "node packages/maze-core/scripts/survey.ts 300"
+  },
+  "devDependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "@types/node": "^24.10.1",
+    "@types/three": "0.180.0",
+    "three": "0.180.0",
+    "typescript": "5.9.3",
+    "vite": "7.1.12",
+    "vitest": "3.2.4"
+  },
+  "dependencies": {
+    "ws": "^8.23.0"
+  }
+}

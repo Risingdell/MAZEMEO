@@ -1,345 +1,121 @@
-# Forest Escape PvP – Maze System Implementation
+# Forest Escape PvP
 
-A complete C++ procedural maze generation system for a multiplayer forest-maze PvP race game.
+An 8-player race up a forested mountain. Every match is a new procedural maze of trails through bamboo, maple ravines, cedar shrines and bog. The exit gate on the summit is always visible; the route to it never is. First to reach it wins. Stealth, traversal (climb / grapple) and combat decide the race, and killing an opponent reveals part of the map.
 
-## 🎮 Game Concept
+> **Status:** Phase 0–1 complete (maze generator v2). Phase 2 environment in progress: procedural sky/weather/wind/foliage/soil, Rapier physics, first-person hands, procedural audio.
+> Stack: TypeScript · three.js · Rapier · Vite · Vitest (Node 24). Server (Phase 5) will be Node, sharing `maze-core`.
 
-**Forest Escape PvP** is an 8-player first/third-person PvP race where:
-- Players spawn at different locations in a hidden forest maze
-- First to reach the exit wins
-- Paths include irregular angles, dead ends, and tool caches
-- Killing opponents reveals part of the map
-- Stealth, combat, and navigation combine for intense gameplay
+![overview](docs/overview.png)
 
-## 🏗️ Project Structure
+## Quick start
 
-```
-MAZEmeo/
-├── server/cpp/                          # C++ game engine
-│   ├── include/
-│   │   ├── types.h                     # Data structures
-│   │   └── constants.h                 # Tuning parameters
-│   ├── src/maze/
-│   │   ├── maze_graph.h/.cpp           # Graph implementation
-│   │   └── maze_generator.h/.cpp       # RandomWalk algorithm
-│   └── test/
-│       └── maze_test.cpp               # Test & example
-│
-├── STEP4_COMPLETE_SUMMARY.md            # What was built
-├── MAZE_ALGORITHM_GUIDE.md              # Algorithm explanation
-├── RANDOMWALK_CODE_WALKTHROUGH.md       # Code line-by-line
-├── BUILD_GUIDE.md                       # Build & compile instructions
-└── README.md                            # This file
-```
-
-## ✨ What's Implemented
-
-### ✅ Complete
-- **Data Structures** (`types.h`)
-  - `MazeNode`, `MazeEdge`, `MazeRegion`, `MazeGraph`
-
-- **Graph Operations** (`maze_graph.h/cpp`)
-  - Node/edge creation and querying
-  - Spatial queries (find nearby nodes)
-  - Connectivity validation (BFS)
-  - Region clustering
-
-- **Maze Generation** (`maze_generator.h/cpp`)
-  - **RandomWalk algorithm** - Core procedural generation
-  - Post-processing (dead ends, regions, spawn/exit)
-  - Connectivity validation
-  - Reproducible results (seeded RNG)
-
-- **Testing** (`maze_test.cpp`)
-  - Full example with validation
-  - Statistics output
-  - Connectivity verification
-
-### 📋 TODO (Next Phases)
-- Collision geometry (trees, obstacles)
-- Server integration (Room, Player state)
-- Client integration (streaming, rendering)
-- Gameplay features (spawn, movement, exit detection)
-
-## 🚀 Quick Start
-
-### Compile
 ```bash
-cd server/cpp
-g++ -std=c++17 -I. test/maze_test.cpp src/maze/maze_graph.cpp src/maze/maze_generator.cpp -o maze_test
+npm install
+npm run dev          # Maze Lab at http://localhost:5173
+npm test             # 26 tests over 60 seeds
+npm run typecheck
+npm run maze -- 42 7 # print stats for seeds
+npm run survey       # tune: stats over 300 seeds
 ```
 
-### Run
-```bash
-./maze_test
+**URL options:** `?seed=42` · `?cam=p1`..`p8` (stand at a spawn) · `?time=5..19` · `?weather=clear|overcast|mist|rain|storm` · `?auto=1` (weather cycles) · `?quality=low`
+
+**Walk controls:** WASD move · Shift run · Space jump · C crouch · Click throw a stone · **V switch first/third person** · Esc pause (click to resume)
+
+## Layout
+
+```
+packages/maze-core/      engine-agnostic, deterministic generator (runs on server + client)
+  src/rng.ts             sfc32 PRNG + hashing (never use Math.random in core)
+  src/noise.ts           seeded value noise / fbm
+  src/terrain.ts         base mountain height function
+  src/generator.ts       maze pipeline (see below)
+  src/field.ts           walkability + height grid (collision & rendering)
+  src/graph.ts           Dijkstra, BFS, union-find, heap
+  src/checksum.ts        maze checksum for client/server agreement
+  test/                  vitest suite
+  scripts/               print-maze, survey
+apps/viewer/src/         three.js "Maze Lab"
+  main.ts                game loop: modes, input, physics step, render
+  world.ts               assembles terrain, forest, horizon, exit gate, markers, debug overlay
+  ui.ts                  side panel (seed, environment, stats, fairness)
+  audio.ts               procedural Web Audio: wind, rain, birds, thunder, footsteps, impacts
+  lab.ts (+ lab.html)    Asset Lab: cheap close-up scene for reviewing grass, leaves and hands
+  env/textures.ts        procedural tileable textures (soil layers, bark, leaf cards, leaf atlas)
+  env/leafArt.ts         botanical leaf painters: palmate maple, ovate broadleaf, bamboo lance
+  env/terrain.ts         5-layer height-blended soil shader, wetness, puddles, bog water
+  env/foliage.ts         maple/cedar/bamboo/dead trees, rocks, lanterns (chunked instancing)
+  env/grass.ts           GPU grass + reeds: real blade geometry around the player, driven by the walk field
+  env/ferns.ts           GPU bracken ferns (orange in the ravine, green in the shrine forest)
+  env/cascade.ts         the ravine waterfall landmark: stone steps, falling water, pool, spray, sound
+  env/post.ts            cinematic pipeline: height mist + sun glow, light shafts, bloom, colour grade
+  env/ambience.ts        per-biome mood (mist, shafts, dust) and the golden-hour sun alignment
+  env/motes.ts           dust motes glowing in the sun shafts
+  env/shared.ts          shared env uniforms + wind-bend shader patch
+  env/sky.ts             sun path, sky, clouds, fog colour, sky lighting (PMREM), lightning
+  env/weather.ts         weather presets, transitions, auto cycle, wetness, lightning timing
+  env/rain.ts, leaves.ts GPU rain streaks + splashes, falling leaves
+  player/physics.ts      Rapier world: terrain heightfield, trunk/rock colliders, props, stones
+  player/controller.ts   first-person character controller
+  player/hands.ts        first-person hands view model + animation
+  player/character.ts    third-person explorer (procedural model + procedural animation)
+  turnaround.ts (+ .html) character sheet: the explorer in A-pose, 4 views
+  hud.ts                 compass map of explored trails, stamina/tools/noise icons, camera hint
+docs/                    plan + design notes
 ```
 
-### Expected Output
-```
-====== FOREST ESCAPE MAZE TEST ======
+## Environment & player (viewer)
 
-[MAZE_GEN] Starting maze generation (seed=42)...
-[MAZE_GEN] Step 1: Random walk...
-[MAZE_GEN]   Created 78 nodes
-[MAZE_GEN] Step 2: Marking dead ends...
-[MAZE_GEN]   Found 23 dead ends
-[MAZE_GEN] Step 3: Validating connectivity...
-[MAZE_GEN]   All 78 nodes are connected
-[MAZE_GEN] Step 4: Assigning regions...
-[MAZE_GEN]   Assigned 4 regions
-[MAZE_GEN] Step 5: Assigning spawn/exit points...
-[MAZE_GEN]   Spawn 0 at node 5
-...
-✓ Test complete!
-```
+Everything is procedural: no downloaded art or sound files.
 
-## 🧠 Algorithm Overview
+- **Sky & sun:** physically based sky with a sun path from 05:00 to 19:00, golden hour, and shadows that follow the player. The sky lights the scene through PMREM image-based lighting.
+- **Weather:** clear, overcast, mist, rain and storm. Presets blend smoothly. Rain builds up ground wetness, which then dries slowly. Storms bring lightning, with thunder delayed by distance.
+- **Wind:** gust fronts travel across the map. Trees, bamboo, grass, cloud drift, rain slant and leaf fall all follow the wind.
+- **Soil:** moss, trail dirt, rock (triplanar on cliffs), leaf litter and mud, blended by height. Wet ground goes darker and glossier, and puddles show rain ripples.
+- **Physics (Rapier):** the terrain heightfield is built from the walk field. Trees, rocks, the torii and cache plinths are colliders. Loose rocks and logs can be pushed, and thrown stones bounce and roll.
+- **Character:** acceleration and friction, gravity, jump, sprint and crouch. Slopes are limited to 48°. Wet and muddy ground slows you or makes you slip. Footstep sounds change with the surface.
+- **Grass:** real curved blades rather than alpha cards. They grow in a world-anchored field around the player, read the walk field for density, and blend from ground-coloured roots to the tips. The trail centre stays bare, trampled edges are short, and marsh banks get reeds. Blades bend in gusts and part around the player.
+- **Leaves:** botanical leaf shapes with serrated edges and veins, used in both the canopy cards and the falling leaves. Falling leaves are cupped and glide side to side like real ones.
+- **Hands:** a procedural view model at real adult proportions: shaped palm, knuckles, tapered fingers with nails, and a three-bone thumb, in a skin-sheen material. It animates for idle, walk, run, jump and land, sways with mouse look, and has a stone-throw animation.
 
-**Random Walk with Recursive Branching**
+**Maple Ravine showcase (P6, seed 42):** the default time is golden hour (17:18), and the sun path is rotated so it sets down the ravine spawn's first trail. You walk into backlit mist and light shafts between tall dark trunks with golden canopies and low red maples. The ground is an orange leaf carpet with bracken ferns, mossy pink granite boulders sit along the trail, and a stepped waterfall falls into a pool beside the path (with positional water sound). The **Cinematic** toggle in the panel switches the mist, light shafts, bloom and grading on or off.
 
-```cpp
-RandomWalk(position, depth):
-  1. Create node at position
-  2. For each of 2-3 random directions:
-     a. Pick irregular angle (30°, 45°, 60°, etc.)
-     b. Calculate next position
-     c. Validate (bounds, separation)
-     d. If valid: recurse from next position
-  3. Stop when depth > 6
-  return node_id
-```
+**Mountain pine forest (Shrine region; P1/P7/P8 on seed 42):** tall ponderosa and lodgepole pines with plated bark, branch whorls carrying needle tufts, and dead lower stubs. A dusty trail runs between 3 m mossy banks, with low shrubs, ferns and wild grass along it and grey lichen-covered granite boulders. Blue valley mist fills the low ground. A snow-capped granite range surrounds the whole map. The player wears worn leather gloves with rope-wrapped wrists.
 
-Result: Tree-like maze with ~70-90 nodes, organic branching, natural dead ends.
+**Third person & HUD:** the default view is over the shoulder. The camera sits behind the explorer's right shoulder and pulls in when trees or banks are in the way, and V switches to first person. The explorer is an original procedural character (male, about 30, lean build): a weathered stubbled face, short dark hair, wide-brim dark-brown felt hat, olive field jacket open over a cream henley, leather chest strap with a pouch, backpack with bedroll and coiled rope, rope-wrapped leather gloves, a hatchet on the belt, dark canvas trousers and brown hiking boots. The character is animated for walking, running, crouching, jumping and throwing. The HUD has a parchment compass map that shows only the trails you have explored, plus stamina, tools and noise icons. Sprinting drains stamina, glowing tool caches can be picked up, and footsteps raise your noise. URL options: `view=first`, `ui=0`, `turn=`.
 
-## 📚 Documentation
+**Character turnaround:** <http://localhost:5173/turnaround.html> shows the in-game explorer in an A-pose from the front, three-quarter, side and back views, on a grey backdrop with an 8-head proportion grid. The model is built to the 8-head canon (1.80 m, 1 head = 0.225 m): chin at 7 heads, elbows at navel height (5), wrists at crotch height (4), knees at 2, and shoulders 2 heads wide.
 
-### Essential Reads (In Order)
-1. **MAZE_ALGORITHM_GUIDE.md**
-   - Conceptual explanation
-   - Visual execution traces
-   - Parameter tuning
+**Asset Lab:** <http://localhost:5173/lab.html> is a cheap close-up scene for reviewing assets. `?spawn=1..8` (or `?scene=p6`) previews a real spawn area cheaply (`&look=cascade` faces the waterfall, `&up=` raises the camera). Other options are `?textures=1`, `?zoom=2.2` (hands close-up), `?pose=relaxed|stone|fist`, `?quality=low`, `?time=`, `?weather=` and `?wind=`.
 
-2. **RANDOMWALK_CODE_WALKTHROUGH.md**
-   - Line-by-line code explanation
-   - Real execution trace with values
-   - Key decision points
+## Generation pipeline (`generateMaze(seed, config?)`)
 
-3. **BUILD_GUIDE.md**
-   - File organization
-   - Function reference
-   - Debugging tips
+1. **Junctions:** Poisson-disc points (30 m spacing) on a 250 m disc. Node 0 is the summit/exit.
+2. **Candidate trails:** Gabriel graph. It is planar, so trails never cross.
+3. **Spanning tree:** randomised Kruskal gives a perfect maze.
+4. **Loops:** about 18% extra edges, each shortcutting 6+ tree hops. These create flanking routes so there are no single chokepoints.
+5. **Terrain + edge kinds:** slope ≥ 0.33 is a **climb**, slope ≥ 0.52 is a **grapple**.
+6. **Regions:** 4 biome sectors (Bamboo Thicket, Maple Ravine, Shrine Ruins, Misty Marsh) plus Summit Pass, with an adjacency graph for kill reveals.
+7. **Fair spawns:** one per 45° sector, at least 60 m apart. Weighted travel cost to the exit is equalised using an exact smallest-range search.
+8. **Caches:** dead ends hold tools. Longer dead-end branches hold better tools (risk/reward).
 
-4. **STEP4_COMPLETE_SUMMARY.md**
-   - What was built
-   - How to use in code
-   - Next steps
+Attempts retry with derived seeds until the fairness spread is ≤ 8%.
 
-## 🔧 Core API
+**Measured over 300 seeds:** 0 failures · fairness spread p50 5.1%, max 8.0% · generation p50 ≈ 5 ms in Node · about 125 junctions, about 22 loops, about 24 dead ends.
 
-```cpp
-#include "src/maze/maze_generator.h"
+## Core API
 
-// Generate maze
-MazeGenerator generator(seed);
-MazeGraph maze = generator.Generate();
+```ts
+import { generateMaze, buildField, heightAt, isWalkable, mazeChecksum, shortestPath, edgeCost, DEFAULT_CONFIG } from '@mazemeo/maze-core';
 
-// Query nodes
-MazeNode* node = maze.GetNode(nodeId);
-std::vector<uint16_t> neighbors = maze.GetNeighbors(nodeId);
-float distance = maze.Distance(nodeA, nodeB);
-bool reachable = maze.IsConnected(nodeA, nodeB);
-
-// Query special points
-uint16_t spawn0 = maze.GetSpawnPoint(0);     // 0-7
-uint16_t exit = maze.GetExitPoint();
-
-// Iterate all nodes
-for (const auto& [id, node] : maze.GetNodes()) {
-  Vec3 pos = node.position;
-  uint16_t region = node.regionId;
-  bool isDeadEnd = node.isDeadEnd;
-}
-
-// Debug
-maze.PrintGraph();
-maze.PrintStatistics();
+const maze = generateMaze(seed);              // deterministic
+const field = buildField(maze);               // 2 m grid: height, clearance, region
+isWalkable(field, x, z);                      // server-side movement validation
+heightAt(field, x, z);                        // ground snap
+mazeChecksum(maze);                           // clients verify they built the same maze
+maze.spawns, maze.exit, maze.regions[i].neighbors, maze.nodes[i].cache
 ```
 
-## 📊 Key Parameters
+## Roadmap
 
-Edit `include/constants.h`:
-
-| Parameter | Default | Effect |
-|-----------|---------|--------|
-| `MAZE_TARGET_NODES` | 80 | Approximate nodes to generate |
-| `NODE_SPAWN_DISTANCE` | 5.0m | Distance between nodes |
-| `FOREST_BOUNDS` | 250m | Max radius of maze |
-| `MAX_WALK_DEPTH` | 6 | Recursion depth (higher = larger) |
-| `MIN_BRANCHES` | 2 | Min branches per node |
-| `MAX_BRANCHES` | 3 | Max branches per node |
-
-## 🎯 Key Features
-
-- ✅ Procedural generation (no hand-designed mazes)
-- ✅ Reproducible (seeded RNG)
-- ✅ Fast (<1ms generation)
-- ✅ Fully connected (all nodes reachable)
-- ✅ Natural dead ends (~25-30% of nodes)
-- ✅ Balanced spawns (greedy distribution)
-- ✅ Region clustering (for map mechanics)
-- ✅ Production-ready code quality
-
-## 🧪 Testing
-
-The included `maze_test.cpp` validates:
-- ✓ All nodes created (80-90)
-- ✓ All nodes connected (BFS)
-- ✓ 8 spawn points assigned (far apart)
-- ✓ 1 exit point assigned (farthest from spawns)
-- ✓ Dead ends marked (~23-30)
-- ✓ Regions assigned (~4-5)
-
-Run: `./maze_test`
-
-## 🔍 File Guide
-
-### Data Structure Definitions
-- **[types.h](server/cpp/include/types.h)** – MazeNode, MazeEdge, MazeGraph
-
-### Constants & Tuning
-- **[constants.h](server/cpp/include/constants.h)** – All tuning parameters
-
-### Graph Implementation
-- **[maze_graph.h](server/cpp/src/maze/maze_graph.h)** – Interface
-- **[maze_graph.cpp](server/cpp/src/maze/maze_graph.cpp)** – Implementation
-
-### Maze Generation
-- **[maze_generator.h](server/cpp/src/maze/maze_generator.h)** – Interface
-- **[maze_generator.cpp](server/cpp/src/maze/maze_generator.cpp)** – RandomWalk algorithm
-
-### Testing
-- **[maze_test.cpp](server/cpp/test/maze_test.cpp)** – Example usage
-
-### Documentation
-- **[MAZE_ALGORITHM_GUIDE.md](MAZE_ALGORITHM_GUIDE.md)** – Detailed algorithm explanation
-- **[RANDOMWALK_CODE_WALKTHROUGH.md](RANDOMWALK_CODE_WALKTHROUGH.md)** – Code line-by-line
-- **[BUILD_GUIDE.md](BUILD_GUIDE.md)** – Build & debugging guide
-- **[STEP4_COMPLETE_SUMMARY.md](STEP4_COMPLETE_SUMMARY.md)** – Summary & next steps
-
-## 🛠️ Requirements
-
-- **C++17** compiler (g++, clang, MSVC)
-- **GLM** library (header-only) – [glm.g-truc.net](https://glm.g-truc.net/)
-
-Install GLM:
-```bash
-# Linux
-apt install libglm-dev
-
-# macOS
-brew install glm
-
-# Or download: https://glm.g-truc.net/
-```
-
-## 💡 Key Insights
-
-1. **RandomWalk produces organic mazes**
-   - Recursive branching naturally creates pathways
-   - Validation ensures no overlaps
-   - Depth limit prevents infinite expansion
-
-2. **Regions enable dynamic map reveals**
-   - Killing reveals region + adjacent regions
-   - Exploration gradually reveals map
-   - Balances knowledge asymmetry between players
-
-3. **Dead ends have strategic value**
-   - Tool spawn locations (combat, stealth items)
-   - Risk/reward: deep tools but dead end trap
-   - ~25-30% of nodes are dead ends
-
-4. **Spawn/exit placement is critical**
-   - Greedy algorithm distributes spawns far apart
-   - Exit is farthest from all spawns
-   - Creates balanced race conditions
-
-## 🚀 Next Phases
-
-### Phase 5: Collision Geometry (TBD)
-- AABB trees for obstacles
-- Raycasting for movement validation
-- Per-region collision volumes
-
-### Phase 6: Server Integration (TBD)
-- Room class managing maze
-- Player spawning at spawn points
-- Position validation against maze
-
-### Phase 7: Client Integration (TBD)
-- Streaming maze to clients
-- 3D forest rendering
-- Local movement prediction
-
-### Phase 8: Gameplay (TBD)
-- Exit detection & win condition
-- Map reveal mechanics
-- Tool pickup & inventory
-
-## 📈 Performance Characteristics
-
-| Metric | Value |
-|--------|-------|
-| Generation time | <1ms |
-| Memory per maze | ~50 KB |
-| Nodes generated | 70-90 |
-| Edges generated | 140-180 |
-| Regions created | 4-5 |
-| Dead ends | 20-25 |
-| Max recursion depth | 6 |
-
-## 🔗 Related Files
-
-- Game Design Spec: (in project documentation)
-- Networking Architecture: (TBD)
-- Server Implementation: (Phase 6+)
-- Client Implementation: (Phase 7+)
-
-## 📝 Notes
-
-- **Reproducibility:** Same seed generates identical mazes (great for testing)
-- **Tuning:** All parameters in `constants.h` for easy experimentation
-- **Validation:** Connectivity verified via BFS (all nodes reachable)
-- **Dead Ends:** Automatically marked (nodes with 1 edge)
-- **Spawn Distribution:** Greedy algorithm ensures good spacing
-
-## 🎓 Learning Path
-
-1. Read **MAZE_ALGORITHM_GUIDE.md** (understand concepts)
-2. Read **RANDOMWALK_CODE_WALKTHROUGH.md** (understand code)
-3. Examine **maze_generator.cpp** (see implementation)
-4. Run **maze_test.cpp** (see results)
-5. Modify **constants.h** and recompile (experiment)
-6. Integrate into game engine (next phase)
-
-## 🤝 Contributing
-
-To modify the algorithm:
-1. Edit tuning parameters in `constants.h`
-2. Modify `RandomWalk()` or helper functions
-3. Recompile and run `maze_test`
-4. Verify with `PrintStatistics()` and `PrintGraph()`
-
-## 📄 License
-
-(Specify your project license)
-
-
-
----
-
-**Status: ✅ Complete** (Step 4: C++ Maze Graph System)
-
-**Last Updated:** 2026-02-18
-
-**Next Review:** After Phase 5 (Collision Geometry)
+See [docs/PLAN.md](docs/PLAN.md). The remaining Phase 2 work is real glTF art with LODs, a landmark per region, grapple anchors, and performance profiling on real hardware.

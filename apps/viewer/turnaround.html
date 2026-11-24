@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Explorer Turnaround — Forest Escape</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #cfcfcd; font-family: system-ui, sans-serif; color: #3a3a38; }
+      canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      header { position: fixed; top: 14px; left: 0; right: 0; text-align: center; letter-spacing: 0.06em; }
+      header h1 { margin: 0; font-size: 15px; font-weight: 650; text-transform: uppercase; }
+      header p { margin: 4px 0 0; font-size: 12px; opacity: 0.7; }
+      #grid { position: fixed; inset: 0; pointer-events: none; }
+      #grid .gl { position: absolute; left: 0; right: 0; border-top: 1px solid rgba(70, 90, 120, 0.28); }
+      #grid .n { position: absolute; left: 10px; top: 2px; font-size: 11px; font-weight: 600; color: #5a6a80; }
+      #grid .l { position: absolute; right: 10px; top: 2px; font-size: 10px; color: #a04030; letter-spacing: 0.04em; }
+      canvas#scene { z-index: 1; }
+      #captions { position: fixed; left: 0; right: 0; bottom: 14px; display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; font-size: 12px; font-weight: 600; letter-spacing: 0.12em; }
+    </style>
+  </head>
+  <body>
+    <div id="grid"></div>
+    <canvas id="scene"></canvas>
+    <header>
+      <h1>Explorer — Character Turnaround</h1>
+      <p>In-game procedural model · 8 heads = 1.80 m · neutral A-pose · front / ¾ / side / back</p>
+    </header>
+    <div id="captions"><span>FRONT</span><span>¾ VIEW</span><span>SIDE</span><span>BACK</span></div>
+    <script type="module" src="./src/turnaround.ts"></script>
+  </body>
+</html>
